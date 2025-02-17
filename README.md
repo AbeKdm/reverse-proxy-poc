@@ -23,7 +23,7 @@ Make sure you have the following software installed:
 
 Clone the project repository to your local machine:
 
-```bash
+bash
 git clone https://github.com/your-username/reverse-proxy.git
 cd reverse-proxy
 
