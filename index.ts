@@ -2,23 +2,15 @@ import * as net from 'net';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import HealthCheck from './HealthCheck';
 import { Request, Response, NextFunction } from 'express';
+import { getLogger } from './logger'; // Import getLogger directly
+
 
 const express = require('express');
-const log4js = require('log4js');
-// configure log4js with console and file logging
-log4js.configure({
-    appenders: {
-        console: { type: 'console' },
-        file: { type: 'file', filename: 'reverse-proxy.log' }
-    },
-    categories: {
-        default: { appenders: ['console', 'file'], level: 'debug' }
-    }
-});
-
 const app = express();
-const logger = log4js.getLogger();
+
+const logger = getLogger('PROXY'); 
 logger.level = 'debug';
+
 
 let TARGET_SERVERS: string[] = [
     "http://localhost:5041",

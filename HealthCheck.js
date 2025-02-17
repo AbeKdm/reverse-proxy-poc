@@ -40,8 +40,10 @@ var net = require("net");
 var http = require("http");
 var https = require("https");
 var url_1 = require("url");
+var logger_1 = require("./logger"); // Import getLogger directly
 var HealthCheck = /** @class */ (function () {
     function HealthCheck() {
+        this.logger = (0, logger_1.getLogger)('HC');
     }
     HealthCheck.prototype.checkHealth = function (type_1, target_1, timeout_1) {
         return __awaiter(this, arguments, void 0, function (type, target, timeout, healthPath) {
@@ -63,12 +65,12 @@ var HealthCheck = /** @class */ (function () {
                                 _this.checkHttp(protocol, hostname, port, healthPath, timeout * 1000, resolve);
                             }
                             else {
-                                console.error("Unsupported test type");
+                                _this.logger.error("Unsupported test type");
                                 resolve(false);
                             }
                         }
                         catch (error) {
-                            console.error("Invalid target format", error);
+                            _this.logger.error("Invalid target format", error);
                             resolve(false);
                         }
                     })];
@@ -76,6 +78,7 @@ var HealthCheck = /** @class */ (function () {
         });
     };
     HealthCheck.prototype.checkTcp = function (hostname, port, timeout, callback) {
+        this.logger.trace("Checking TCP health for ".concat(hostname, ":").concat(port));
         var client = new net.Socket();
         var timer = setTimeout(function () {
             client.destroy();

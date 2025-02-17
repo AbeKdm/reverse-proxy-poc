@@ -38,20 +38,10 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var http_proxy_middleware_1 = require("http-proxy-middleware");
 var HealthCheck_1 = require("./HealthCheck");
+var logger_1 = require("./logger"); // Import getLogger directly
 var express = require('express');
-var log4js = require('log4js');
-// configure log4js with console and file logging
-log4js.configure({
-    appenders: {
-        console: { type: 'console' },
-        file: { type: 'file', filename: 'reverse-proxy.log' }
-    },
-    categories: {
-        default: { appenders: ['console', 'file'], level: 'debug' }
-    }
-});
 var app = express();
-var logger = log4js.getLogger();
+var logger = (0, logger_1.getLogger)('PROXY');
 logger.level = 'debug';
 var TARGET_SERVERS = [
     "http://localhost:5041",

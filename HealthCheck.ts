@@ -2,11 +2,13 @@ import * as net from 'net';
 import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
+import { getLogger } from './logger'; // Import getLogger directly
 
 class HealthCheck {
+    private logger = getLogger('HC');
+
     async checkHealth(type: string, target: string, timeout: number, healthPath: string = '/'): Promise<boolean> {
         if (timeout < 2 || timeout > 60) throw new Error("Timeout must be between 2 and 60 seconds");
-        
         return new Promise((resolve) => {
             try {
                 const url = new URL(target);
@@ -19,17 +21,18 @@ class HealthCheck {
                 } else if (type.toUpperCase() === 'HTTP') {
                     this.checkHttp(protocol, hostname, port, healthPath, timeout * 1000, resolve);
                 } else {
-                    console.error("Unsupported test type");
+                    this.logger.error("Unsupported test type");
                     resolve(false);
                 }
             } catch (error) {
-                console.error("Invalid target format", error);
+                this.logger.error("Invalid target format", error);
                 resolve(false);
             }
         });
     }
 
     private checkTcp(hostname: string, port: number, timeout: number, callback: (result: boolean) => void): void {
+        this.logger.trace(`Checking TCP health for ${hostname}:${port}`);
         const client = new net.Socket();
         const timer = setTimeout(() => {
             client.destroy();
