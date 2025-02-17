@@ -10,23 +10,6 @@ This project implements a reverse proxy server using Express.js and `http-proxy-
 - **Load Balancing**: Routes to healthy servers in a round-robin fashion.
 - **Sticky Sessions**: Routes requests from the same client to the same server for 30 seconds after the first use, based on the `x-target-server-last-use` header.
 
-## Installation
-
-To set up the reverse proxy, follow these steps:
-
-### Prerequisites
-Make sure you have the following software installed:
-- **Node.js**: Version 14 or higher
-- **npm**: Node Package Manager (comes with Node.js)
-
-### 1. Clone the Repository
-
-Clone the project repository to your local machine:
-
-bash
-git clone https://github.com/your-username/reverse-proxy.git
-cd reverse-proxy
-
 ## Configuration
 
 The proxy server can be configured to route traffic to different backend servers, and the health checks can be performed over TCP or HTTP.
