@@ -3,9 +3,22 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import HealthCheck from './HealthCheck';
 import { Request, Response, NextFunction } from 'express';
 
-var express = require('express');
-var app = express();
+const express = require('express');
+const log4js = require('log4js');
+// configure log4js with console and file logging
+log4js.configure({
+    appenders: {
+        console: { type: 'console' },
+        file: { type: 'file', filename: 'reverse-proxy.log' }
+    },
+    categories: {
+        default: { appenders: ['console', 'file'], level: 'debug' }
+    }
+});
 
+const app = express();
+const logger = log4js.getLogger();
+logger.level = 'debug';
 
 let TARGET_SERVERS: string[] = [
     "http://localhost:5041",
@@ -48,11 +61,11 @@ const GetNodeServerUrl = async (): Promise<string> => {
         lastServerIndex = (lastServerIndex + 1) % TARGET_SERVERS.length;
 
         if (isServerHealthy) {
-            console.log(`[INFO] Routing to healthy server: ${currentServer}`);
+            logger.info(`Routing to healthy server: ${currentServer}`);
             return currentServer;
         }
 
-        console.log(`[WARNING] Server ${currentServer} is down. Skipping...`);
+        logger.warn(`[WARNING] Server ${currentServer} is down. Skipping...`);
     }
 
     throw new Error("No healthy servers available!");
@@ -67,11 +80,11 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
         const currentEpoch = Date.now();
         const diffInSec = (currentEpoch - lastUseEpoch) / 1000;
 
-        console.log(`[INFO] Current time: ${currentEpoch}, last used time: ${lastUseEpoch}`);
-        console.log(`[INFO] Last used server was used ${diffInSec} seconds ago.`);
+        logger.info(`Current time: ${currentEpoch}, last used time: ${lastUseEpoch}`);
+        logger.info(`Last used server was used ${diffInSec} seconds ago.`);
 
         if (diffInSec > 30) {
-            console.log(`[INFO] Reusing the last used server ${targetServer} as it was used less than 30 seconds ago.`);
+            logger.info(`Reusing the last used server ${targetServer} as it was used less than 30 seconds ago.`);
             targetServer = undefined;
         }
 
@@ -79,9 +92,9 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
             const isServerHealthy = await healthCheck.checkHealth('TCP', targetServer, 5);
             //const healthy = await isServerHealthy(targetServer);
             if (isServerHealthy) {
-                console.log(`[INFO] Routing to server from header: ${targetServer}`);
+                logger.info(`Routing to server from header: ${targetServer}`);
             } else {
-                console.log(`[ERROR] Specified server ${targetServer} is down, falling back to default routing.`);
+                logger.error(`Specified server ${targetServer} is down, falling back to default routing.`);
                 targetServer = undefined;
             }
         }
@@ -91,7 +104,7 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
         try {
             targetServer = await GetNodeServerUrl();
         } catch (err) {
-            console.error(`[ERROR] ${err instanceof Error ? err.message : err}`);
+            logger.error(`${err instanceof Error ? err.message : err}`);
             return res.status(500).json({ error: "No healthy servers available" });
         }
     }
@@ -99,16 +112,17 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
     const proxy = createProxyMiddleware({
         target: targetServer,
         changeOrigin: true,
+        logger: logger,
         ws: true,
         on: {
             proxyReq: (proxyReq, req: Request) => {
-                console.log(`[PROXY] ${req.method} ${req.originalUrl} -> ${targetServer}${req.originalUrl}`);
+                logger.info(`[PROXY] ${req.method} ${req.originalUrl} -> ${targetServer}${req.originalUrl}`);
             },
             proxyRes: (proxyRes, req: Request) => {
-                console.log(`[PROXY] ${req.method} ${req.originalUrl} <- ${targetServer}${req.originalUrl} (${proxyRes.statusCode})`);
+                logger.info(`[PROXY] ${req.method} ${req.originalUrl} <- ${targetServer}${req.originalUrl} (${proxyRes.statusCode})`);
             },
             error: (err, req: Request, res: Response) => {
-                console.error(`[ERROR] ${req.method} ${req.originalUrl}: ${err.message}`);
+                logger.error(`[PROXY] ${req.method} ${req.originalUrl}: ${err.message}`);
                 res.status(500).json({ error: "Proxy error", details: err.message });
             }
         }
@@ -119,10 +133,10 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
 
 const PORT = 25000;
 app.listen(PORT, async () => {
-    console.log(`Reverse proxy running on http://localhost:${PORT}, forwarding to healthy servers:`);
+    logger.info(`Reverse proxy running on http://localhost:${PORT}, forwarding to healthy servers:`);
     for (const server of TARGET_SERVERS) {
         const isTcpHealthy = await healthCheck.checkHealth('TCP', server, 5);
-        console.log(`Server ${server} is ${isTcpHealthy ? 'healthy' : 'unhealthy'}`);
+        logger.info(`Server ${server} is ${isTcpHealthy ? 'healthy' : 'unhealthy'}`);
     }
 });
 

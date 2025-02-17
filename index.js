@@ -39,7 +39,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var http_proxy_middleware_1 = require("http-proxy-middleware");
 var HealthCheck_1 = require("./HealthCheck");
 var express = require('express');
+var log4js = require('log4js');
+// configure log4js with console and file logging
+log4js.configure({
+    appenders: {
+        console: { type: 'console' },
+        file: { type: 'file', filename: 'reverse-proxy.log' }
+    },
+    categories: {
+        default: { appenders: ['console', 'file'], level: 'debug' }
+    }
+});
 var app = express();
+var logger = log4js.getLogger();
+logger.level = 'debug';
 var TARGET_SERVERS = [
     "http://localhost:5041",
     "http://localhost:5042",
@@ -85,10 +98,10 @@ var GetNodeServerUrl = function () { return __awaiter(void 0, void 0, void 0, fu
                 //const healthy = await isServerHealthy(currentServer);
                 lastServerIndex = (lastServerIndex + 1) % TARGET_SERVERS.length;
                 if (isServerHealthy) {
-                    console.log("[INFO] Routing to healthy server: ".concat(currentServer));
+                    logger.info("Routing to healthy server: ".concat(currentServer));
                     return [2 /*return*/, currentServer];
                 }
-                console.log("[WARNING] Server ".concat(currentServer, " is down. Skipping..."));
+                logger.warn("[WARNING] Server ".concat(currentServer, " is down. Skipping..."));
                 _a.label = 3;
             case 3:
                 i++;
@@ -108,10 +121,10 @@ app.use(function (req, res, next) { return __awaiter(void 0, void 0, void 0, fun
                 lastUseEpoch = parseInt(req.headers["x-target-server-last-use"], 10);
                 currentEpoch = Date.now();
                 diffInSec = (currentEpoch - lastUseEpoch) / 1000;
-                console.log("[INFO] Current time: ".concat(currentEpoch, ", last used time: ").concat(lastUseEpoch));
-                console.log("[INFO] Last used server was used ".concat(diffInSec, " seconds ago."));
+                logger.info("Current time: ".concat(currentEpoch, ", last used time: ").concat(lastUseEpoch));
+                logger.info("Last used server was used ".concat(diffInSec, " seconds ago."));
                 if (diffInSec > 30) {
-                    console.log("[INFO] Reusing the last used server ".concat(targetServer, " as it was used less than 30 seconds ago."));
+                    logger.info("Reusing the last used server ".concat(targetServer, " as it was used less than 30 seconds ago."));
                     targetServer = undefined;
                 }
                 if (!targetServer) return [3 /*break*/, 2];
@@ -120,10 +133,10 @@ app.use(function (req, res, next) { return __awaiter(void 0, void 0, void 0, fun
                 isServerHealthy = _a.sent();
                 //const healthy = await isServerHealthy(targetServer);
                 if (isServerHealthy) {
-                    console.log("[INFO] Routing to server from header: ".concat(targetServer));
+                    logger.info("Routing to server from header: ".concat(targetServer));
                 }
                 else {
-                    console.log("[ERROR] Specified server ".concat(targetServer, " is down, falling back to default routing."));
+                    logger.error("Specified server ".concat(targetServer, " is down, falling back to default routing."));
                     targetServer = undefined;
                 }
                 _a.label = 2;
@@ -138,22 +151,23 @@ app.use(function (req, res, next) { return __awaiter(void 0, void 0, void 0, fun
                 return [3 /*break*/, 6];
             case 5:
                 err_1 = _a.sent();
-                console.error("[ERROR] ".concat(err_1 instanceof Error ? err_1.message : err_1));
+                logger.error("".concat(err_1 instanceof Error ? err_1.message : err_1));
                 return [2 /*return*/, res.status(500).json({ error: "No healthy servers available" })];
             case 6:
                 proxy = (0, http_proxy_middleware_1.createProxyMiddleware)({
                     target: targetServer,
                     changeOrigin: true,
+                    logger: logger,
                     ws: true,
                     on: {
                         proxyReq: function (proxyReq, req) {
-                            console.log("[PROXY] ".concat(req.method, " ").concat(req.originalUrl, " -> ").concat(targetServer).concat(req.originalUrl));
+                            logger.info("[PROXY] ".concat(req.method, " ").concat(req.originalUrl, " -> ").concat(targetServer).concat(req.originalUrl));
                         },
                         proxyRes: function (proxyRes, req) {
-                            console.log("[PROXY] ".concat(req.method, " ").concat(req.originalUrl, " <- ").concat(targetServer).concat(req.originalUrl, " (").concat(proxyRes.statusCode, ")"));
+                            logger.info("[PROXY] ".concat(req.method, " ").concat(req.originalUrl, " <- ").concat(targetServer).concat(req.originalUrl, " (").concat(proxyRes.statusCode, ")"));
                         },
                         error: function (err, req, res) {
-                            console.error("[ERROR] ".concat(req.method, " ").concat(req.originalUrl, ": ").concat(err.message));
+                            logger.error("[PROXY] ".concat(req.method, " ").concat(req.originalUrl, ": ").concat(err.message));
                             res.status(500).json({ error: "Proxy error", details: err.message });
                         }
                     }
@@ -168,7 +182,7 @@ app.listen(PORT, function () { return __awaiter(void 0, void 0, void 0, function
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log("Reverse proxy running on http://localhost:".concat(PORT, ", forwarding to healthy servers:"));
+                logger.info("Reverse proxy running on http://localhost:".concat(PORT, ", forwarding to healthy servers:"));
                 _i = 0, TARGET_SERVERS_1 = TARGET_SERVERS;
                 _a.label = 1;
             case 1:
@@ -177,7 +191,7 @@ app.listen(PORT, function () { return __awaiter(void 0, void 0, void 0, function
                 return [4 /*yield*/, healthCheck.checkHealth('TCP', server, 5)];
             case 2:
                 isTcpHealthy = _a.sent();
-                console.log("Server ".concat(server, " is ").concat(isTcpHealthy ? 'healthy' : 'unhealthy'));
+                logger.info("Server ".concat(server, " is ").concat(isTcpHealthy ? 'healthy' : 'unhealthy'));
                 _a.label = 3;
             case 3:
                 _i++;
