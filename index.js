@@ -1,143 +1,189 @@
-const express = require("express");
-const net = require("net");
-const { createProxyMiddleware } = require("http-proxy-middleware");
-
-const HealthCheck = require('./HealthCheck');
-
-const app = express();
-
-let TARGET_SERVERS = [
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (g && (g = 0, op[0] && (_ = 0)), _) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var http_proxy_middleware_1 = require("http-proxy-middleware");
+var HealthCheck_1 = require("./HealthCheck");
+var express = require('express');
+var app = express();
+var TARGET_SERVERS = [
     "http://localhost:5041",
     "http://localhost:5042",
-    "http://localhost:5043"
+    "http://localhost:5043",
+    "http://localhost:5044",
+    "http://localhost:5045"
 ];
-
-// add a healthcheck using  HealthCheck class
-const healthCheck = new HealthCheck();
-
-// Variable to track the last used server index
-let lastServerIndex = 0;
-
-// Function to check if a server is reachable via TCP
-const isServerHealthy = (serverUrl) => {
-    console.log(`[DEBUG] Checking server health: ${serverUrl}`);
+var healthCheck = new HealthCheck_1.default();
+var lastServerIndex = 0;
+/*const isServerHealthy = (serverUrl: string): Promise<boolean> => {
+    console.log(`\n[DEBUG] Checking server health: ${serverUrl}`);
     return new Promise((resolve) => {
         const { hostname, port } = new URL(serverUrl);
-        const socket = net.connect(port, hostname, () => {
+        const socket = net.connect(parseInt(port), hostname, () => {
             socket.destroy();
-            resolve(true); // Server is reachable
+            resolve(true);
         });
 
-        socket.setTimeout(200); // Set timeout for 0.2 second
+        socket.setTimeout(200);
         socket.on("timeout", () => {
             socket.destroy();
-            resolve(false); // Server is not responding
+            resolve(false);
         });
 
         socket.on("error", () => {
-            resolve(false); // Server is not available
+            resolve(false);
         });
     });
-};
-
-// Function to get the next healthy server in a round-robin manner
-const GetNodeServerUrl = async () => {
-    // Loop through the servers to find a healthy one
-    for (let i = 0; i < TARGET_SERVERS.length; i++) {
-        const currentServer = TARGET_SERVERS[lastServerIndex];
-        const healthy = await isServerHealthy(currentServer);
-
-        lastServerIndex = (lastServerIndex + 1) % TARGET_SERVERS.length;
-
-        if (healthy) {
-            // Update the last used server index for the next round-robin selection
-            console.log(`[INFO] Routing to healthy server: ${currentServer}`);
-            return currentServer;
-        }
-
-        console.log(`[WARNING] Server ${currentServer} is down. Skipping...`);
-    }
-
-    throw new Error("No healthy servers available!");
-};
-
-// Middleware to dynamically assign a target server with health check
-app.use(async (req, res, next) => {
-    let targetServer = req.headers['x-target-server'];
-    // log request and this header
-    console.log(`\n[INFO] Request: ${req.method} ${req.originalUrl}, x-target-server: ${targetServer}`);
-
-    // If the 'x-target-server' header is present, perform health check on it
-    if (targetServer) {
-
-        if (req.headers["x-target-server-last-use"]) {
-            const lastUseEpoch = parseInt(req.headers["x-target-server-last-use"], 10);
-            const currentEpoch = Date.now();
-
-            console.log(`x-target-server-last-use: ${lastUseEpoch}, currentEpoch: ${currentEpoch}`);
-
-            const diffInMs = currentEpoch - lastUseEpoch;
-            const diffInSec = diffInMs / 1000; // Convert to seconds
-            const diffInMin = diffInSec / 60;  // Convert to minutes
-            console.log(`[INFO] Last used server was used ${diffInSec} seconds ago.`);
-
-            if (diffInSec > 30) {
-                console.log(`[INFO] Reusing the last used server ${targetServer} as it was used less than a 30 seconds ago.`);
-                targetServer = null; // Reset to fallback logic if the specified server is unhealthy
-            }
-
-        }
-
-        if (targetServer) {
-            const healthy = await isServerHealthy(targetServer);
-            if (healthy) {
-                console.log(`[INFO] Routing to server from header: ${targetServer}`);
-            } else {
-                console.log(`[ERROR] Specified server ${targetServer} is down, falling back to default routing.`);
-                targetServer = null; // Reset to fallback logic if the specified server is unhealthy
-            }
-        }
-    }
-
-    // If no valid target server from header, or if the header's server is unhealthy, fallback to the default round-robin server selection
-    if (!targetServer) {
-        try {
-            targetServer = await GetNodeServerUrl();
-        } 
-        catch (err) {
-            console.error(`[ERROR] ${err.message}`);
-            return res.status(500).json({ error: "No healthy servers available" });
-        }
-    }
-
-    const proxy = createProxyMiddleware({
-        target: targetServer,
-        changeOrigin: true,
-        ws: true,
-        logLevel: "debug",
-        on: {
-            proxyReq: (proxyReq, req, res) => {
-                console.log(`[PROXY] ${req.method} ${req.originalUrl} -> ${targetServer}${req.originalUrl}`);
-            },
-            proxyRes: (proxyRes, req, res) => {
-                console.log(`[PROXY] ${req.method} ${req.originalUrl} <- ${targetServer}${req.originalUrl} (${proxyRes.statusCode})`);
-            },
-            error: (err, req, res) => {
-                console.error(`[ERROR] ${req.method} ${req.originalUrl}: ${err.message}`);
-                res.status(500).json({ error: "Proxy error", details: err.message });
-            }
+};*/
+var GetNodeServerUrl = function () { return __awaiter(void 0, void 0, void 0, function () {
+    var i, currentServer, isServerHealthy;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                i = 0;
+                _a.label = 1;
+            case 1:
+                if (!(i < TARGET_SERVERS.length)) return [3 /*break*/, 4];
+                currentServer = TARGET_SERVERS[lastServerIndex];
+                return [4 /*yield*/, healthCheck.checkHealth('TCP', currentServer, 5)];
+            case 2:
+                isServerHealthy = _a.sent();
+                //const healthy = await isServerHealthy(currentServer);
+                lastServerIndex = (lastServerIndex + 1) % TARGET_SERVERS.length;
+                if (isServerHealthy) {
+                    console.log("[INFO] Routing to healthy server: ".concat(currentServer));
+                    return [2 /*return*/, currentServer];
+                }
+                console.log("[WARNING] Server ".concat(currentServer, " is down. Skipping..."));
+                _a.label = 3;
+            case 3:
+                i++;
+                return [3 /*break*/, 1];
+            case 4: throw new Error("No healthy servers available!");
         }
     });
-
-    return proxy(req, res, next);
-});
-
-// Start the proxy server
-const PORT = 25000;
-app.listen(PORT, () => {
-    console.log(`Reverse proxy running on http://localhost:${PORT}, forwarding to healthy servers:`);
-    TARGET_SERVERS.forEach(async (server) => {
-        const isTcpHealthy = await healthCheck.checkHealth('TCP', server, 5);
-        console.log(`Server ${server} is ${isTcpHealthy ? 'healthy' : 'unhealthy'}`);
-    });    
-});
+}); };
+app.use(function (req, res, next) { return __awaiter(void 0, void 0, void 0, function () {
+    var targetServer, lastUseEpoch, currentEpoch, diffInSec, isServerHealthy, err_1, proxy;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                targetServer = req.headers['x-target-server'];
+                console.log("[INFO] Request: ".concat(req.method, " ").concat(req.originalUrl, ", x-target-server: ").concat(targetServer));
+                if (!targetServer) return [3 /*break*/, 2];
+                lastUseEpoch = parseInt(req.headers["x-target-server-last-use"], 10);
+                currentEpoch = Date.now();
+                diffInSec = (currentEpoch - lastUseEpoch) / 1000;
+                console.log("[INFO] Current time: ".concat(currentEpoch, ", last used time: ").concat(lastUseEpoch));
+                console.log("[INFO] Last used server was used ".concat(diffInSec, " seconds ago."));
+                if (diffInSec > 30) {
+                    console.log("[INFO] Reusing the last used server ".concat(targetServer, " as it was used less than 30 seconds ago."));
+                    targetServer = undefined;
+                }
+                if (!targetServer) return [3 /*break*/, 2];
+                return [4 /*yield*/, healthCheck.checkHealth('TCP', targetServer, 5)];
+            case 1:
+                isServerHealthy = _a.sent();
+                //const healthy = await isServerHealthy(targetServer);
+                if (isServerHealthy) {
+                    console.log("[INFO] Routing to server from header: ".concat(targetServer));
+                }
+                else {
+                    console.log("[ERROR] Specified server ".concat(targetServer, " is down, falling back to default routing."));
+                    targetServer = undefined;
+                }
+                _a.label = 2;
+            case 2:
+                if (!!targetServer) return [3 /*break*/, 6];
+                _a.label = 3;
+            case 3:
+                _a.trys.push([3, 5, , 6]);
+                return [4 /*yield*/, GetNodeServerUrl()];
+            case 4:
+                targetServer = _a.sent();
+                return [3 /*break*/, 6];
+            case 5:
+                err_1 = _a.sent();
+                console.error("[ERROR] ".concat(err_1 instanceof Error ? err_1.message : err_1));
+                return [2 /*return*/, res.status(500).json({ error: "No healthy servers available" })];
+            case 6:
+                proxy = (0, http_proxy_middleware_1.createProxyMiddleware)({
+                    target: targetServer,
+                    changeOrigin: true,
+                    ws: true,
+                    on: {
+                        proxyReq: function (proxyReq, req) {
+                            console.log("[PROXY] ".concat(req.method, " ").concat(req.originalUrl, " -> ").concat(targetServer).concat(req.originalUrl));
+                        },
+                        proxyRes: function (proxyRes, req) {
+                            console.log("[PROXY] ".concat(req.method, " ").concat(req.originalUrl, " <- ").concat(targetServer).concat(req.originalUrl, " (").concat(proxyRes.statusCode, ")"));
+                        },
+                        error: function (err, req, res) {
+                            console.error("[ERROR] ".concat(req.method, " ").concat(req.originalUrl, ": ").concat(err.message));
+                            res.status(500).json({ error: "Proxy error", details: err.message });
+                        }
+                    }
+                });
+                return [2 /*return*/, proxy(req, res, next)];
+        }
+    });
+}); });
+var PORT = 25000;
+app.listen(PORT, function () { return __awaiter(void 0, void 0, void 0, function () {
+    var _i, TARGET_SERVERS_1, server, isTcpHealthy;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                console.log("Reverse proxy running on http://localhost:".concat(PORT, ", forwarding to healthy servers:"));
+                _i = 0, TARGET_SERVERS_1 = TARGET_SERVERS;
+                _a.label = 1;
+            case 1:
+                if (!(_i < TARGET_SERVERS_1.length)) return [3 /*break*/, 4];
+                server = TARGET_SERVERS_1[_i];
+                return [4 /*yield*/, healthCheck.checkHealth('TCP', server, 5)];
+            case 2:
+                isTcpHealthy = _a.sent();
+                console.log("Server ".concat(server, " is ").concat(isTcpHealthy ? 'healthy' : 'unhealthy'));
+                _a.label = 3;
+            case 3:
+                _i++;
+                return [3 /*break*/, 1];
+            case 4: return [2 /*return*/];
+        }
+    });
+}); });
+exports.default = app;
